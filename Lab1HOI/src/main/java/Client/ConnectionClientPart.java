@@ -1,17 +1,15 @@
 package Client;
 
-import Server.Finder;
-
 import java.io.*;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class ConnectionClientPart {
-    private static Socket clientSocket;
-    private static DataInputStream in;
-    private static DataOutputStream out;
-    private static boolean finder;
+    private static final BlockingQueue<String> genQueue = new LinkedBlockingQueue<>();
     private static int delaySec = 0;
     private static boolean exitBeforeRead = false;
     private static String serverHost = "localhost";
@@ -28,71 +26,88 @@ public class ConnectionClientPart {
             String p = System.getProperty("client.serverPort");
             if (p != null) serverPort = Integer.parseInt(p);
         } catch (Exception ignored) {}
-        BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
-        while (true) {
-            try {
-                System.out.print("Введите имя: ");
-                String name = reader.readLine();
-                if (name == null || name.trim().isEmpty()) continue;
-                if ("exit".equalsIgnoreCase(name.trim())) {
-                    System.out.println("Клиент завершает работу...");
-                    return;
-                }
 
-                finder = new Finder().find(name);
-                if(finder){
-                    System.out.println("Сертификат найден локально, запрос на сервер сделан не будет...");
-                    continue;
-                }
+        Thread inputThread = new Thread(() -> {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+                while (true) {
 
-                clientSocket = new Socket(serverHost, serverPort);
-                in = new DataInputStream(clientSocket.getInputStream());
-                out = new DataOutputStream(clientSocket.getOutputStream());
+                    System.out.println("Ждём ввода имени...");
+                    String name = reader.readLine();
+                    System.out.println("Прочитали имя: " + name);
 
-                byte[] nameBytes = name.getBytes("US-ASCII");
-                out.write(nameBytes);
-                out.writeByte(0);
-                out.flush();
-
-                if (delaySec > 0) {
-                    try { Thread.sleep(delaySec * 1000L); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
-                }
-
-                if (exitBeforeRead) {
-                    System.out.println("Клиент завершает работу без чтения ответа (имитация аварии)...");
-                    return;
-                }
-
-                int certLen = in.readInt();
-                byte[] certBytes = new byte[certLen];
-                in.readFully(certBytes);
-                Files.write(Paths.get(name + ".crt"), certBytes);
-
-                int pubLen = in.readInt();
-                byte[] pubBytes = new byte[pubLen];
-                in.readFully(pubBytes);
-                Files.write(Paths.get(name + ".pub"), pubBytes);
-
-                int privLen = in.readInt();
-                byte[] privBytes = new byte[privLen];
-                in.readFully(privBytes);
-                Files.write(Paths.get(name + ".key"), privBytes);
-
-                System.out.println("Файлы .crt, .pub и .key успешно сохранены для " + name);
-
-            } catch (IOException e) {
-                System.err.println(e);
-            } finally {
-                try {
-                    if (clientSocket != null && !clientSocket.isClosed()) {
-                        clientSocket.close();
-                        in.close();
-                        out.close();
+                    if (name == null || name.trim().isEmpty()) continue;
+                    if ("exit".equalsIgnoreCase(name.trim())) {
+                        System.out.println("Клиент завершает работу...");
+                        System.exit(0);
                     }
-                } catch (IOException e) {
-                    System.err.println(e);
+                    genQueue.offer(name);
+                }
+            } catch (IOException e) {
+                System.err.println("Ошибка ввода: " + e.getMessage());
+            }
+        }, "input-thread");
+        inputThread.setDaemon(true);
+        inputThread.start();
+
+        int genWorkers = Math.max(1, ClientConfig.handlerThreads);
+        for (int i = 0; i < genWorkers; i++) {
+            Thread worker = new Thread(() -> {
+                while (true) {
+                    try {
+                        String name = genQueue.take();
+                        processRequest(name);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        break;
+                    }
+                }
+            }, "gen-worker-" + i);
+            worker.start();
+        }
+    }
+
+    private void processRequest(String name) {
+        try (Socket clientSocket = new Socket(serverHost, serverPort);
+             DataInputStream in = new DataInputStream(clientSocket.getInputStream());
+             DataOutputStream out = new DataOutputStream(clientSocket.getOutputStream())) {
+
+            byte[] nameBytes = name.getBytes("US-ASCII");
+            out.write(nameBytes);
+            out.writeByte(0);
+            out.flush();
+
+            if (delaySec > 0) {
+                try {
+                    Thread.sleep(delaySec * 1000L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
                 }
             }
+
+            if (exitBeforeRead) {
+                System.out.println("Клиент завершает работу без чтения ответа (имитация аварии)...");
+                return;
+            }
+
+            int certLen = in.readInt();
+            if (certLen <= 0 || certLen > 10_000_000) throw new IOException("Некорректная длина сертификата: " + certLen);
+            byte[] certBytes = in.readNBytes(certLen);
+            Files.write(Paths.get(name + ".crt"), certBytes);
+
+            int pubLen = in.readInt();
+            if (pubLen <= 0 || pubLen > 10_000_000) throw new IOException("Некорректная длина публичного ключа: " + pubLen);
+            byte[] pubBytes = in.readNBytes(pubLen);
+            Files.write(Paths.get(name + ".pub"), pubBytes);
+
+            int privLen = in.readInt();
+            if (privLen <= 0 || privLen > 10_000_000) throw new IOException("Некорректная длина приватного ключа: " + privLen);
+            byte[] privBytes = in.readNBytes(privLen);
+            Files.write(Paths.get(name + ".key"), privBytes);
+
+            System.out.println("Файлы .crt, .pub и .key успешно сохранены для " + name);
+
+        } catch (IOException e) {
+            System.err.println("Ошибка клиента при работе с " + name + ": " + e.getMessage());
         }
     }
 }

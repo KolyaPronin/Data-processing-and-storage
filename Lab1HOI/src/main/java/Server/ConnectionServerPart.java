@@ -127,9 +127,11 @@ public class ConnectionServerPart {
                                     byte b = readBuffer.get();
                                     if (b == 0) {
                                         String name = acc.toString("US-ASCII");
+                                        System.out.println("начал ставить имя в очередь генерации...");
                                         waiters.computeIfAbsent(name, k -> new ConcurrentLinkedQueue<SocketChannel>()).add(ch);
                                         if (enqueued.add(name)) {
                                             genQueue.offer(name);
+                                            System.out.println("Имя " + name + " поставлено в очередь генерации");
                                         }
                                         key.interestOps(0);
                                         break;

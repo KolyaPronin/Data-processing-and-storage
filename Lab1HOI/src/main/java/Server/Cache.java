@@ -9,7 +9,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 public class Cache {
-    public static final Map<String, CompletableFuture<KeyPairAndCert>> cache = new ConcurrentHashMap<String, CompletableFuture<KeyPairAndCert>>();
+    public static final Map<String, CompletableFuture<KeyPairAndCert>> cache = new ConcurrentHashMap<>();
     public static ExecutorService generationPool = Executors.newFixedThreadPool(Math.max(1, Runtime.getRuntime().availableProcessors()));
 
     public static synchronized void configureGenerationPool(int threads) {

@@ -56,8 +56,14 @@ public class Main {
         if ("client".equalsIgnoreCase(mode)) {
             new Thread(() -> new ConnectionClientPart().client(), "client-main").start();
         } else if ("both".equalsIgnoreCase(mode)) {
-            new ConnectionClientPart().client();
-            System.exit(0);
+            Thread clientThread = new Thread(() -> new ConnectionClientPart().client(), "client-main");
+            clientThread.start();
+
+            try {
+                clientThread.join(); // главный поток ждёт завершения клиента
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
         }
     }
 }

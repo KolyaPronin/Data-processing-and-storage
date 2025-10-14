@@ -19,4 +19,3 @@ public class KeyPairAndCert {
     public PrivateKey getPrivateKey() { return privateKey; }
     public X509Certificate getCertificate() { return certificate; }
 }
-
