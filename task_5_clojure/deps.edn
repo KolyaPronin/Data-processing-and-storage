@@ -1,0 +1,5 @@
+{:paths ["."]
+ :deps {}
+
+ :aliases
+ {:run {:main-opts ["-m" "task-5-clojure.core"]}}}
