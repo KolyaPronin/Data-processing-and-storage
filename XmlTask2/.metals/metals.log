@@ -1,0 +1,794 @@
+2026.03.03 16:23:19 INFO  Started: Metals version 1.6.5 in folders '/home/kirill/Desktop/XML_HOI_NSU/HOI/X1' for client Visual Studio Code 1.109.2.
+2026.03.03 16:23:19 INFO  Memory monitor started
+2026.03.03 16:23:19 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+мар. 03, 2026 4:23:20 PM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleNotification
+WARNING: Notification threw an exception: {
+  "jsonrpc": "2.0",
+  "method": "textDocument/didOpen",
+  "params": {
+    "textDocument": {
+      "uri": "file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/kolodina/XML1/Collector.java",
+      "languageId": "java",
+      "version": 2,
+      "text": "package ru.nsu.shelestov.XML1;\n\nimport lombok.AllArgsConstructor;\nimport data.ru.nsu.pronin.XML2.PeopleInfo;\nimport data.ru.nsu.pronin.XML2.Person;\nimport data.ru.nsu.pronin.XML2.PersonToRole;\n\nimport java.util.*;\n\n@AllArgsConstructor\npublic class Collector {\n    PeopleInfo peopleInfo;\n\n    public Map\u003cString, Person\u003e merge() {\n        Map\u003cString, Person\u003e idToPerson \u003d new HashMap\u003c\u003e();\n        for (Map.Entry\u003cString, Person\u003e entry : peopleInfo.getIdToPerson().entrySet()) {\n            Person fullPerson \u003d entry.getValue();\n            Map\u003cString, String\u003e relatives \u003d new HashMap\u003c\u003e();\n            if (peopleInfo.getNameToPerson().containsKey(fullPerson.getFullName())) {\n                peopleInfo.getNameToPerson().get(fullPerson.getFullName()).add(fullPerson); // put full person idk\n            }\n\n            if (idToPerson.containsKey(entry.getKey())) {\n                System.err.println(\"duplicate id: \" + entry.getKey());\n            }\n            idToPerson.put(entry.getKey(), fullPerson);\n        }\n\n        for (Person guy: peopleInfo.getPeople()) {\n            mergeRelativesByIds(guy, peopleInfo.getNameToPerson(), idToPerson);\n        }\n\n        mergePeopleWithOnlyName(idToPerson, peopleInfo.getNameToPerson(), peopleInfo.getPeople());\n        for (Person guy : idToPerson.values()) {\n            mergeRelativesByIds(\n                    guy,\n                    peopleInfo.getNameToPerson(),\n                    idToPerson\n            );\n        }\n        return idToPerson;\n    }\n\n    public void mergeRelativesByIds(Person person, Map\u003cString, List\u003cPerson\u003e\u003e nameToPerson, Map\u003cString, Person\u003e idToPerson) {\n        List\u003cString\u003e namesToRemove \u003d new ArrayList\u003c\u003e();\n        for (Map.Entry\u003cString, String\u003e relative: person.getRelativeToRole().entrySet()) {\n            if (Person.isId(relative.getKey())) {\n                if (!idToPerson.containsKey(relative.getKey())) {\n                    System.out.println(\"why\" + relative.getKey() + \" doesn\u0027t exist\");\n                }\n                String name \u003d idToPerson.get(relative.getKey()).getFullName();\n                String role \u003d relative.getValue();\n                if (!Person.isSpecificRole(role)) {\n                    if (name !\u003d null) {\n                        String relativeRole \u003d person.getRelativeToRole().get(name);\n                        if (relativeRole !\u003d null) {\n                            person.getRelativeToRole().put(relative.getKey(), relativeRole);\n                        }\n                    }\n                }\n                namesToRemove.add(name);\n            }\n        }\n\n        List\u003cPersonToRole\u003e idsToPut \u003d new ArrayList\u003c\u003e();\n        for (Map.Entry\u003cString, String\u003e relative: person.getRelativeToRole().entrySet()) {\n            if (!Person.isId(relative.getKey())) {\n                List\u003cPerson\u003e suspects \u003d nameToPerson.get(relative.getKey());\n                if (suspects \u003d\u003d null) {\n                    continue;\n                }\n                for (Person dude : suspects) {\n                    if (dude.getId() \u003d\u003d null) {\n                        continue;\n                    }\n                    String role \u003d relative.getValue();\n\n                    String ourDudeRole \u003d dude.getRelativeToRole().get(person.getId());\n                    if (ourDudeRole \u003d\u003d null) {\n                        ourDudeRole \u003d dude.getRelativeToRole().get(person.getFullName());\n                    }\n                    if (ourDudeRole \u003d\u003d null) {\n                        continue;\n                    }\n                    idsToPut.add(new PersonToRole(dude.getId(), role));\n                    namesToRemove.add(relative.getKey());\n                    break;\n                }\n            }\n        }\n        for (String name: namesToRemove) {\n            person.getRelativeToRole().remove(name);\n        }\n        for (PersonToRole id: idsToPut) {\n            person.getRelativeToRole().put(id.getName(), id.getRole());\n        }\n    }\n\n    public void mergePeopleWithOnlyName(Map\u003cString, Person\u003e idToPerson, Map\u003cString, List\u003cPerson\u003e\u003e nameToPerson, List\u003cPerson\u003e people) {\n        for (Map.Entry\u003cString, List\u003cPerson\u003e\u003e entry : nameToPerson.entrySet()) {\n            List\u003cPerson\u003e ids \u003d new ArrayList\u003c\u003e();\n            List\u003cPerson\u003e noIds \u003d new ArrayList\u003c\u003e();\n            for (Person person : entry.getValue()) {\n                if (person.getId() !\u003d null) {\n                    ids.add(person);\n                } else {\n                    noIds.add(person);\n                }\n            }\n            if (ids.size() \u003d\u003d 1) {\n                Person onePerson \u003d ids.getFirst();\n                for (Person person: noIds) {\n                    onePerson \u003d mergePersonToId(person, onePerson);\n                }\n                idToPerson.put(onePerson.getId(), onePerson);\n                continue;\n            }\n            for (Person person : noIds) {\n                Person fullPerson \u003d person;\n                for (Person id: ids) {\n                    if (!checkAuxMarkersAndGender(person, id)) {\n                        continue;\n                    }\n                    if (!validateRelatives(person, id)) {\n                        continue;\n                    }\n                    fullPerson \u003d mergePersonToId(id, fullPerson);\n\n                    Parser.collectFullName(fullPerson);\n                }\n\n                idToPerson.put(fullPerson.getId(), fullPerson);\n            }\n        }\n    }\n\n    public boolean checkAuxMarkersAndGender(Person person1, Person person2) {\n        int childNum1 \u003d person1.getChildrenNumber();\n        int childNum2 \u003d person2.getChildrenNumber();\n        if (childNum1 !\u003d -1 \u0026\u0026 childNum2 !\u003d -1) {\n            if (childNum1 !\u003d childNum2) {\n                return false;\n            }\n        }\n\n        int sibNum1 \u003d person1.getSiblingsNumber();\n        int sibNum2 \u003d person2.getSiblingsNumber();\n        if (sibNum1 !\u003d -1 \u0026\u0026 sibNum2 !\u003d -1) {\n            if (sibNum1 !\u003d sibNum2) {\n                return false;\n            }\n        }\n\n        if ((person1.getGender() !\u003d null) \u0026\u0026 (person2.getGender() !\u003d null)) {\n            Character g1 \u003d person1.getGender().toLowerCase().charAt(0);\n            Character g2 \u003d person2.getGender().toLowerCase().charAt(0);\n            return g1.equals(g2);\n        }\n        return true;\n    }\n\n    public boolean validateRelatives(Person person1, Person person2) {\n        if (!Objects.equals(person1.getMother(), null) \u0026\u0026 (!Objects.equals(person1.getMother(), \"\"))\n                \u0026\u0026 !Objects.equals(person2.getMother(), null) \u0026\u0026  !Objects.equals(person2.getMother(), \"\")) {\n            String mother1 \u003d person1.getMother();\n            String mother2 \u003d person2.getMother();\n            if (!isSamePerson(mother1, mother2)) {\n                return false;\n            }\n        }\n        if (!Objects.equals(person1.getFather(), null) \u0026\u0026 !Objects.equals(person1.getFather(), \"\")\n                \u0026\u0026 !Objects.equals(person2.getFather(), null) \u0026\u0026 !Objects.equals(person2.getFather(), \"\")) {\n            String father1 \u003d person1.getFather();\n            String father2 \u003d person2.getFather();\n            if (!isSamePerson(father1, father2)) {\n                return false;\n            }\n        }\n        if (!Objects.equals(person1.getSpouce(), null) \u0026\u0026 !Objects.equals(person2.getSpouce(), null)) {\n            String spouse1 \u003d person1.getSpouce().getName();\n            String spouse2 \u003d person2.getSpouce().getName();\n            if (!isSamePerson(spouse1, spouse2)) {\n                return false;\n            }\n        }\n        return true;\n    }\n\n    public boolean isSamePerson(String name1, String name2) {\n        if (Person.isId(name1) \u0026\u0026 Person.isId(name2)) {\n            return name1.equals(name2);\n        }\n        else if (!Person.isId(name1) \u0026\u0026 !Person.isId(name2)) {\n            return name1.equals(name2);\n        } else {\n            if (Person.isId(name1)) {\n                String nameFromId1 \u003d peopleInfo.getIdToPerson().get(name1).getFullName();\n                return nameFromId1.equals(name2);\n            } else {\n                String nameFromId2 \u003d peopleInfo.getIdToPerson().get(name2).getFullName();\n                return nameFromId2.equals(name1);\n            }\n        }\n    }\n\n    public static Person mergePersonToId(Person pName, Person pId) {\n        if (pId.getId() \u003d\u003d null) {\n            pId.setId(pName.getId());\n        }\n        if (pName.getFullName() !\u003d null) {\n            pId.setFullName(pName.getFullName());\n        }\n        if (pName.getGender() !\u003d null) {\n            pId.setGender(pName.getGender());\n        }\n        for (Map.Entry\u003cString, String\u003e entry : pName.getRelativeToRole().entrySet()) {\n            String name \u003d entry.getKey();\n            String role \u003d entry.getValue();\n            if (pId.getRelativeToRole().containsKey(name)) {\n                if (Person.isSpecificRole(role)) {\n                    pId.getRelativeToRole().put(name, role);\n                }\n            }else {\n                pId.getRelativeToRole().put(name, role);\n            }\n        }\n        return pId;\n    }\n}\n"
+    }
+  }
+}
+java.lang.IllegalStateException: An unexpected exception occurred while executing jsonrpc method public abstract java.util.concurrent.CompletableFuture scala.meta.metals.lsp.TextDocumentService.didOpen(org.eclipse.lsp4j.DidOpenTextDocumentParams)
+	at org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint.lambda$recursiveFindRpcMethods$0(GenericEndpoint.java:73)
+	at org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint.notify(GenericEndpoint.java:160)
+	at org.eclipse.lsp4j.jsonrpc.RemoteEndpoint.handleNotification(RemoteEndpoint.java:231)
+	at org.eclipse.lsp4j.jsonrpc.RemoteEndpoint.consume(RemoteEndpoint.java:198)
+	at org.eclipse.lsp4j.jsonrpc.json.StreamMessageProducer.handleMessage(StreamMessageProducer.java:185)
+	at org.eclipse.lsp4j.jsonrpc.json.StreamMessageProducer.listen(StreamMessageProducer.java:97)
+	at org.eclipse.lsp4j.jsonrpc.json.ConcurrentMessageProcessor.run(ConcurrentMessageProcessor.java:114)
+	at java.base/java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.base/java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.base/java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.base/java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.base/java.lang.Thread.run(Thread.java:840)
+Caused by: java.nio.file.NoSuchFileException: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/kolodina/XML1/Collector.java
+	at java.base/sun.nio.fs.UnixException.translateToIOException(UnixException.java:92)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:106)
+	at java.base/sun.nio.fs.UnixException.rethrowAsIOException(UnixException.java:111)
+	at java.base/sun.nio.fs.UnixFileSystemProvider.newByteChannel(UnixFileSystemProvider.java:218)
+	at java.base/java.nio.file.Files.newByteChannel(Files.java:380)
+	at java.base/java.nio.file.Files.newByteChannel(Files.java:432)
+	at java.base/java.nio.file.Files.readAllBytes(Files.java:3288)
+	at scala.meta.internal.io.PlatformFileIO$.slurp(PlatformFileIO.scala:38)
+	at scala.meta.internal.io.FileIO$.slurp(FileIO.scala:18)
+	at scala.meta.internal.metals.MetalsLspService.didOpen(MetalsLspService.scala:756)
+	at scala.meta.internal.metals.WorkspaceLspService.didOpen(WorkspaceLspService.scala:476)
+	at scala.meta.metals.lsp.DelegatingScalaService.didOpen(DelegatingScalaService.scala:38)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)
+	at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:569)
+	at org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint.lambda$recursiveFindRpcMethods$0(GenericEndpoint.java:65)
+	... 11 more
+
+2026.03.03 16:23:20 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/kolodina/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+мар. 03, 2026 4:23:39 PM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 7
+2026.03.03 16:23:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+мар. 03, 2026 4:23:39 PM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 14
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java]
+2026.03.03 16:23:39 INFO  empty definition using pc, found symbol in pc: lombok/AllArgsConstructor# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-39-470.md")
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java]
+2026.03.03 16:23:39 INFO  empty definition using pc, found symbol in pc: lombok/Getter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-40-142.md")
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:40 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java]
+2026.03.03 16:23:40 INFO  empty definition using pc, found symbol in pc: lombok/Getter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-40-279.md")
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java]
+2026.03.03 16:23:39 INFO  empty definition using pc, found symbol in pc: lombok/Setter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-40-349.md")
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:40 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java]
+2026.03.03 16:23:40 INFO  empty definition using pc, found symbol in pc: java/util/List# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-40-451.md")
+2026.03.03 16:23:40 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java]
+2026.03.03 16:23:40 INFO  empty definition using pc, found symbol in pc: lombok/Setter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-40-503.md")
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:41 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:41 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 16:23:41 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java]
+2026.03.03 16:23:41 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-41-517.md")
+2026.03.03 16:23:41 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:41 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java]
+2026.03.03 16:23:42 INFO  empty definition using pc, found symbol in pc: lombok/AllArgsConstructor# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-42-121.md")
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java]
+2026.03.03 16:23:42 INFO  empty definition using pc, found symbol in pc: lombok/Getter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-42-184.md")
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java]
+2026.03.03 16:23:42 INFO  empty definition using pc, found symbol in pc: lombok/Setter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-42-249.md")
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:42 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java
+2026.03.03 16:23:42 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:43 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:43 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:44 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:44 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 16:23:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:49 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java
+2026.03.03 16:23:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 16:23:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:50 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:50 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.03 16:23:51 INFO  empty definition using pc, found symbol in pc: lombok/AllArgsConstructor# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-290.md")
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.03 16:23:51 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-371.md")
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.03 16:23:51 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.03 16:23:51 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PersonToRole# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-524.md")
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java]
+2026.03.03 16:23:52 INFO  empty definition using pc, found symbol in pc: generated/People# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-529.md")
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java]
+2026.03.03 16:23:52 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-589.md")
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java]
+2026.03.03 16:23:52 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PersonToRole# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-638.md")
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java]
+2026.03.03 16:23:52 INFO  empty definition using pc, found symbol in pc: java/util/HashMap# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-699.md")
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:52 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java]
+2026.03.03 16:23:52 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-53-539.md")
+2026.03.03 16:23:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:53 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:53 INFO  empty definition using pc, found symbol in pc: generated/People# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-529.md")
+2026.03.03 16:23:53 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:53 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-589.md")
+2026.03.03 16:23:53 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:53 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PersonToRole# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-638.md")
+2026.03.03 16:23:53 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:23:53 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:24:00 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java
+2026.03.03 16:24:00 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:24:00 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:24:01 INFO  empty definition using pc, found symbol in pc: org/xml/sax/SAXException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-01-800.md")
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:24:01 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-01-841.md")
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:24:01 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-01-882.md")
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:24:01 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/JAXBException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-01-936.md")
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:24:01 INFO  empty definition using pc, found symbol in pc: javax/xml/parsers/ParserConfigurationException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-01-972.md")
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:24:01 INFO  empty definition using pc, found symbol in pc: javax/xml/transform/TransformerException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-02-021.md")
+2026.03.03 16:24:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:24:01 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:24:01 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-02-112.md")
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:02 INFO  empty definition using pc, found symbol in pc: lombok/AllArgsConstructor# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-061.md")
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-144.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-200.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: javax/xml/namespace/QName# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-262.md")
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:02 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/XMLEventReader# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-321.md")
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:02 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/XMLInputFactory# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-378.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/XMLStreamException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-437.md")
+2026.03.03 16:24:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:02 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:02 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/events/Attribute# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-496.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/events/EndElement# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-553.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/events/StartElement# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-612.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/events/XMLEvent# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-669.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java]
+2026.03.03 16:24:03 INFO  empty definition using pc, found symbol in pc: java/io/InputStream# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-731.md")
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:04 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java]
+2026.03.03 16:24:05 INFO  empty definition using pc, found symbol in pc: lombok/AllArgsConstructor# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-05-917.md")
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java]
+2026.03.03 16:24:05 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-05-965.md")
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:06 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java]
+2026.03.03 16:24:06 INFO  empty definition using pc, found symbol in pc: java/util/ArrayList# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-06-030.md")
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:06 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java]
+2026.03.03 16:24:05 INFO  empty definition using pc, found symbol in pc: java/util/List# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-06-366.md")
+2026.03.03 16:24:06 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:06 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java]
+2026.03.03 16:24:06 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-06-404.md")
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: org/w3c/dom/Document# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-09-827.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: org/w3c/dom/Element# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-09-866.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-09-900.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PersonToRole# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-09-936.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/parsers/DocumentBuilder# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-09-978.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/parsers/DocumentBuilderFactory# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-014.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/parsers/ParserConfigurationException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-050.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/XMLOutputFactory# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-095.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/XMLStreamException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-136.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/XMLStreamWriter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-188.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/transform/dom/DOMSource# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-260.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: javax/xml/transform/stream/StreamResult# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-341.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: java/io/File# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-383.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: java/io/FileNotFoundException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-576.md")
+2026.03.03 16:24:10 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: java/io/FileOutputStream# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-617.md")
+2026.03.03 16:24:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:09 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:09 INFO  empty definition using pc, found symbol in pc: java/util/List# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-701.md")
+2026.03.03 16:24:10 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:10 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java]
+2026.03.03 16:24:10 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-10-743.md")
+2026.03.03 16:24:11 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: generated/People# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-597.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: org/xml/sax/SAXException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-633.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-676.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: javax/xml/XMLConstants# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-712.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/JAXBContext# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-745.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/JAXBException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-776.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/Marshaller# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-812.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: javax/xml/validation/Schema# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-845.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: javax/xml/validation/SchemaFactory# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-883.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: java/io/File# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-923.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: java/io/InputStream# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-968.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: java/net/URL# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-13-009.md")
+2026.03.03 16:24:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 16:24:12 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java]
+2026.03.03 16:24:12 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-13-184.md")
+2026.03.03 16:24:13 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+мар. 03, 2026 4:24:49 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+мар. 03, 2026 4:24:50 PM org.eclipse.lsp4j.jsonrpc.services.GenericEndpoint notify
+INFO: Unsupported notification method: $/setTrace
+2026.03.03 16:25:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:16 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java]
+2026.03.03 16:25:16 INFO  empty definition using pc, found symbol in pc: _empty_/WriterJAXB# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-25-16-393.md")
+2026.03.03 16:25:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 16:25:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:48:32 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java
+2026.03.03 23:48:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 23:48:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 23:48:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 23:48:34 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java
+2026.03.03 23:48:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:48:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:48:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:48:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:48:47 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java
+2026.03.03 23:48:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 23:48:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 23:48:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PersonToRole.java. Using fallback presentation compiler.
+2026.03.03 23:48:49 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java
+2026.03.03 23:48:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:48:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:48:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:48:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:48:53 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:49:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:50:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:50:52 INFO  empty definition using pc, found symbol in pc: _empty_/WriterJAXB# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-25-16-393.md")
+2026.03.03 23:51:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:51:58 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.03 23:51:58 INFO  empty definition using pc, found symbol in pc: _empty_/Parser# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_23-51-58-741.md")
+2026.03.03 23:51:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:51:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:51:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:51:58 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:51:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:51:58 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-371.md")
+2026.03.03 23:51:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 23:51:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.03 23:51:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:51:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:00 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:51:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:00 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:00 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:02 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 23:52:03 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 23:52:04 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:52:04 INFO  empty definition using pc, found symbol in pc: _empty_/WriterJAXB# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-25-16-393.md")
+2026.03.03 23:52:04 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:04 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:04 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:05 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:06 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:06 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:06 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:07 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-371.md")
+2026.03.03 23:52:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:07 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:07 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:08 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:09 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:11 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:11 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:11 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:52:11 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:11 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:11 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:12 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:13 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:13 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:13 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:52:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:16 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:16 INFO  empty definition using pc, found symbol in pc: _empty_/Parser# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_23-51-58-741.md")
+2026.03.03 23:52:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:16 INFO  empty definition using pc, found symbol in pc: javax/xml/stream/XMLEventReader# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-03-321.md")
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  empty definition using pc, found symbol in pc: _empty_/Parser# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_23-51-58-741.md")
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.03 23:52:17 INFO  empty definition using pc, found symbol in pc: _empty_/Parser#collectFullName# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_23-52-18-519.md")
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:18 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:20 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Validator.java. Using fallback presentation compiler.
+2026.03.03 23:52:20 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:20 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 23:52:21 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:21 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:21 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 23:52:21 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:21 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:52:23 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:23 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:23 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Writer.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:26 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  empty definition using pc, found symbol in pc: _empty_/WriterJAXB# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-25-16-393.md")
+2026.03.03 23:52:26 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:26 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/JAXBContext# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-745.md")
+2026.03.03 23:52:26 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/JAXBContext# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-745.md")
+2026.03.03 23:52:25 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:26 INFO  empty definition using pc, found symbol in pc: javax/xml/validation/Schema# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-845.md")
+2026.03.03 23:52:26 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:26 INFO  empty definition using pc, found symbol in pc: javax/xml/validation/SchemaFactory# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-883.md")
+2026.03.03 23:52:26 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:26 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:26 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:30 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:30 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:30 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:31 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:52:31 INFO  empty definition using pc, found symbol in pc: _empty_/WriterJAXB# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-25-16-393.md")
+2026.03.03 23:52:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:32 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:52:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:52:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:52:35 INFO  empty definition using pc, found symbol in pc: _empty_/WriterJAXB# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-25-16-393.md")
+2026.03.03 23:52:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Main.java. Using fallback presentation compiler.
+2026.03.03 23:52:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:52:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:41 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:52:41 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:52:43 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:14 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java
+2026.03.03 23:54:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:14 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:17 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:54 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java
+2026.03.03 23:54:54 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:54 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:54 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:54 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:56 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  empty definition using pc, found symbol in pc: _empty_/Parser# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_23-51-58-741.md")
+2026.03.03 23:54:57 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-53-539.md")
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  empty definition using pc, found symbol in pc: generated/People# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-52-529.md")
+2026.03.03 23:54:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.03 23:54:57 INFO  empty definition using pc, found symbol in pc: generated/People# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-597.md")
+2026.03.03 23:54:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:54:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:54:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Parser.java. Using fallback presentation compiler.
+2026.03.03 23:54:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:59 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:54:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:54:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:54:59 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-23-51-446.md")
+2026.03.03 23:55:00 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:55:00 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:55:00 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:55:00 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:55:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:55:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.03 23:55:01 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:55:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:55:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Converter.java. Using fallback presentation compiler.
+2026.03.03 23:55:02 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.04 11:38:07 INFO  Shutting down server
+2026.03.04 11:38:07 INFO  Memory monitor stopped
+2026.03.04 11:38:07 INFO  shutting down Metals
+2026.03.04 11:38:07 INFO  Exiting server
+2026.03.04 11:38:07 ERROR Unexpected error initializing server: 
+org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequest failed with message: Canceled
+	at org.eclipse.lsp4j.jsonrpc.RemoteEndpoint.handleResponse(RemoteEndpoint.java:220)
+	at org.eclipse.lsp4j.jsonrpc.RemoteEndpoint.consume(RemoteEndpoint.java:204)
+	at org.eclipse.lsp4j.jsonrpc.json.StreamMessageProducer.handleMessage(StreamMessageProducer.java:185)
+	at org.eclipse.lsp4j.jsonrpc.json.StreamMessageProducer.listen(StreamMessageProducer.java:97)
+	at org.eclipse.lsp4j.jsonrpc.json.ConcurrentMessageProcessor.run(ConcurrentMessageProcessor.java:114)
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:539)
+	at java.util.concurrent.FutureTask.run(FutureTask.java:264)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.lang.Thread.run(Thread.java:840)
+
+2026.03.10 23:34:13 INFO  Started: Metals version 1.6.6 in folders '/home/kirill/Desktop/XML_HOI_NSU/HOI/X1' for client Visual Studio Code 1.109.2.
+2026.03.10 23:34:13 INFO  Memory monitor started
+2026.03.10 23:34:15 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.03.10 23:34:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+мар. 10, 2026 11:34:15 PM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 2
+2026.03.10 23:34:15 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.10 23:34:16 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java. Using fallback presentation compiler.
+2026.03.10 23:34:22 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java
+2026.03.10 23:34:22 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/PeopleInfo.java
+2026.03.10 23:34:47 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java
+2026.03.10 23:34:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:47 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java]
+2026.03.10 23:34:47 INFO  empty definition using pc, found symbol in pc: lombok/Getter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-34-48-083.md")
+2026.03.10 23:34:48 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:48 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:48 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:48 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java]
+2026.03.10 23:34:48 INFO  empty definition using pc, found symbol in pc: lombok/Setter# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-34-48-429.md")
+2026.03.10 23:34:47 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:48 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:48 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+2026.03.10 23:34:59 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/data/Person.java. Using fallback presentation compiler.
+мар. 10, 2026 11:34:59 PM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 46
+мар. 10, 2026 11:34:59 PM org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+WARNING: Unmatched cancel notification for request id 47
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.10 23:35:32 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-32-940.md")
+2026.03.10 23:35:32 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-32-940.md")
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:33 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.10 23:35:33 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-33-622.md")
+2026.03.10 23:35:32 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-33-622.md")
+2026.03.10 23:35:33 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:32 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java
+2026.03.10 23:35:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:34 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:34 INFO  empty definition using pc, found symbol in pc: generated/People# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-597.md")
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  empty definition using pc, found symbol in pc: org/xml/sax/SAXException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-633.md")
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-676.md")
+2026.03.10 23:35:36 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:36 INFO  empty definition using pc, found symbol in pc: javax/xml/XMLConstants# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-712.md")
+2026.03.10 23:35:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:37 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/JAXBContext# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-745.md")
+2026.03.10 23:35:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/JAXBException# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-776.md")
+2026.03.10 23:35:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  empty definition using pc, found symbol in pc: javax/xml/bind/Marshaller# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-812.md")
+2026.03.10 23:35:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  empty definition using pc, found symbol in pc: javax/xml/validation/Schema# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-845.md")
+2026.03.10 23:35:37 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:38 INFO  empty definition using pc, found symbol in pc: javax/xml/validation/SchemaFactory# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-883.md")
+2026.03.10 23:35:38 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:39 INFO  empty definition using pc, found symbol in pc: java/io/File# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-923.md")
+2026.03.10 23:35:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:39 INFO  empty definition using pc, found symbol in pc: java/io/InputStream# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-12-968.md")
+2026.03.10 23:35:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:39 INFO  empty definition using pc, found symbol in pc: java/net/URL# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-13-009.md")
+2026.03.10 23:35:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:40 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/WriterJAXB.java. Using fallback presentation compiler.
+2026.03.10 23:35:40 INFO  empty definition using pc, found symbol in pc: java/util/Map# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-03/r_empty-definition_16-24-13-184.md")
+2026.03.10 23:35:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:39 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:57 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:57 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.10 23:35:57 INFO  empty definition using pc, found symbol in pc: lombok/AllArgsConstructor# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-57-775.md")
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:57 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PeopleInfo# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-32-940.md")
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:58 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/Person# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-33-622.md")
+2026.03.10 23:35:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:58 INFO  Created report: Optional[file:///home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java]
+2026.03.10 23:35:58 INFO  empty definition using pc, found symbol in pc: ru/nsu/shelestov/XML1/data/PersonToRole# (full report at: "/home/kirill/Desktop/XML_HOI_NSU/HOI/X1/.metals/.reports/metals-full/2026-03-10/r_empty-definition_23-35-58-212.md")
+2026.03.10 23:35:57 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:35:58 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:36:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:36:07 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:36:35 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:21 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:46 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:46 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:46 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:48 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:49 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:51 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:52 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.10 23:38:52 WARN  no build target for: /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java
+2026.03.10 23:38:53 INFO  no build target found for /home/kirill/Desktop/XML_HOI_NSU/HOI/X1/src/main/java/ru/nsu/shelestov/XML1/Collector.java. Using fallback presentation compiler.
+2026.03.11 12:10:29 INFO  Started: Metals version 1.6.6 in folders '/home/kirill/Desktop/XML_HOI_NSU/HOI/X1' for client Visual Studio Code 1.110.0.
+2026.03.11 12:10:29 INFO  Memory monitor started
+2026.03.11 12:10:30 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
+2026.03.11 12:10:30 ERROR Unexpected error initializing server: 
+java.lang.UnsupportedOperationException
+	at org.eclipse.lsp4j.services.LanguageClient.registerCapability(LanguageClient.java:55)
+	at scala.meta.internal.metals.clients.language.DelegatingLanguageClient.registerCapability(DelegatingLanguageClient.scala:38)
+	at scala.meta.internal.metals.MetalsLspService.$anonfun$registerNiceToHaveFilePatterns$5(MetalsLspService.scala:662)
+	at scala.Option$WithFilter.map(Option.scala:242)
+	at scala.meta.internal.metals.MetalsLspService.$anonfun$registerNiceToHaveFilePatterns$3(MetalsLspService.scala:657)
+	at scala.Option.flatMap(Option.scala:283)
+	at scala.meta.internal.metals.MetalsLspService.$anonfun$registerNiceToHaveFilePatterns$2(MetalsLspService.scala:656)
+	at scala.Option.flatMap(Option.scala:283)
+	at scala.meta.internal.metals.MetalsLspService.$anonfun$registerNiceToHaveFilePatterns$1(MetalsLspService.scala:655)
+	at scala.Option.flatMap(Option.scala:283)
+	at scala.meta.internal.metals.MetalsLspService.registerNiceToHaveFilePatterns(MetalsLspService.scala:654)
+	at scala.meta.internal.metals.MetalsLspService.initialized(MetalsLspService.scala:682)
+	at scala.meta.internal.metals.WorkspaceLspService.$anonfun$initialized$4(WorkspaceLspService.scala:1430)
+	at scala.collection.immutable.List.map(List.scala:236)
+	at scala.meta.internal.metals.WorkspaceLspService.$anonfun$initialized$3(WorkspaceLspService.scala:1430)
+	at scala.concurrent.impl.Promise$Transformation.run(Promise.scala:503)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1136)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:635)
+	at java.lang.Thread.run(Thread.java:840)
+
+2026.03.12 16:46:48 INFO  Started: Metals version 1.6.6 in folders '/home/kirill/Desktop/XML_HOI_NSU/HOI/X1' for client Visual Studio Code 1.110.0.
+2026.03.12 16:46:48 INFO  Memory monitor started
+2026.03.12 16:46:49 WARN  Using H2 2.4.240 which is newer than the version Flyway has been verified with. The latest verified version of H2 is 2.3.232.
