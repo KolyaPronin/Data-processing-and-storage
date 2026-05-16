@@ -1,20 +1,26 @@
 Table Male {
-  id integer [primary key, ref: - Person.id]
+  id varchar [primary key, ref: - Person.id]
 }
 
 Table Female {
-  id integer [primary key, ref: - Person.id]
+  id varchar [primary key, ref: - Person.id]
 }
 
 Table Person {
-  id integer [primary key] 
-  first_name varchar
-  last_name varchar
-  mother_id integer [ref: - Female.id]
-  father_id integer [ref: - Male.id]
+  id varchar [primary key]
+  first_name varchar [not null]
+  last_name varchar [not null]
+  mother_id varchar [null, ref: > Female.id]
+  father_id varchar [null, ref: > Male.id]
 }
 
 Table Marriage {
-  husband_id integer [unique, ref: - Male.id]
-  wife_id integer [unique, ref: - Female.id]
+  husband_id varchar [unique, not null, ref: - Male.id]
+  wife_id varchar [unique, not null, ref: - Female.id]
+}
+
+Table Child {
+  person_id varchar [not null, ref: > Person.id]
+  marriage_husband_id varchar [not null, ref: > Marriage.husband_id]
+  marriage_wife_id varchar [not null, ref: > Marriage.wife_id]
 }

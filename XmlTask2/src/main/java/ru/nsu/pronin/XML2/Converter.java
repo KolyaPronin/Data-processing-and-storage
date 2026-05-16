@@ -87,7 +87,17 @@
                         People.Person sibJaxb = idToJaxb.get(rel.getName());
                         if (sibJaxb == null) continue;
 
-                        switch (rel.getRole()) {
+                        String sibRole = rel.getRole();
+                        if (!sibRole.equals("brother") && !sibRole.equals("sister")) {
+                            // normalize generic role by gender
+                            Person sibPerson = persons.get(rel.getName());
+                            if (sibPerson != null && sibPerson.getGender() != null) {
+                                char g = sibPerson.getGender().toLowerCase().charAt(0);
+                                if (g == 'm') sibRole = "brother";
+                                else if (g == 'f') sibRole = "sister";
+                            }
+                        }
+                        switch (sibRole) {
                             case "brother":
                                 siblings.setBrother(sibJaxb);
                                 break;
