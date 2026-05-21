@@ -1,0 +1,1166 @@
+openapi: 3.0.3
+info:
+  title: Flight Booking API
+  version: 1.0.0
+  description: |
+    RESTful API for searching flights, managing bookings, and online check-in.
+
+    ## Authentication
+    All endpoints except geography and schedule lookups require a Bearer JWT token
+    in the `Authorization` header.
+
+    ## Internationalisation
+    Every endpoint that returns human-readable names (cities, airports, flight labels)
+    accepts an `Accept-Language` header (BCP-47, e.g. `ru`, `en-GB`).
+    If the requested locale is not supported the server falls back to `en` silently.
+    A `400` is returned only for a structurally invalid header value.
+
+    ## Idempotency
+    The `POST /bookings` endpoint supports idempotent retries via the
+    `Idempotency-Key` header (see endpoint description).
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production
+  - url: https://staging.api.example.com/v1
+    description: Staging
+
+tags:
+  - name: Geography
+    description: Cities and airports reference data
+  - name: Schedules
+    description: Weekly inbound and outbound flight schedules
+  - name: Routes
+    description: Flight route search
+  - name: Bookings
+    description: Create and retrieve bookings
+  - name: Check-in
+    description: Online check-in
+
+# ---------------------------------------------------------------------------
+# Reusable components
+# ---------------------------------------------------------------------------
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    AcceptLanguage:
+      name: Accept-Language
+      in: header
+      required: false
+      schema:
+        type: string
+        example: ru
+      description: |
+        BCP-47 language tag for localised names (e.g. `ru`, `en-GB`).
+        Falls back to `en` when the requested locale is unsupported.
+
+    CityId:
+      name: city_id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: SVO-CITY
+      description: City identifier.
+
+    Iata:
+      name: iata
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 3
+        maxLength: 3
+        example: SVO
+      description: IATA airport code (3 uppercase letters).
+
+    BookingId:
+      name: booking_id
+      in: path
+      required: true
+      schema:
+        type: string
+        example: bk_xyz789
+      description: Booking identifier returned at creation.
+
+  schemas:
+
+    # --- Geography -----------------------------------------------------------
+
+    City:
+      type: object
+      required: [id, name, country_code, timezone]
+      properties:
+        id:
+          type: string
+          example: SVO-CITY
+        name:
+          type: string
+          example: Moscow
+        country:
+          type: string
+          example: Russia
+        country_code:
+          type: string
+          minLength: 2
+          maxLength: 2
+          example: RU
+        timezone:
+          type: string
+          example: Europe/Moscow
+
+    Airport:
+      type: object
+      required: [iata, name, city_id, city_name, country_code, timezone]
+      properties:
+        iata:
+          type: string
+          example: SVO
+        name:
+          type: string
+          example: Sheremetyevo International Airport
+        city_id:
+          type: string
+          example: SVO-CITY
+        city_name:
+          type: string
+          example: Moscow
+        country_code:
+          type: string
+          example: RU
+        lat:
+          type: number
+          format: double
+          example: 55.9726
+        lon:
+          type: number
+          format: double
+          example: 37.4146
+        timezone:
+          type: string
+          example: Europe/Moscow
+
+    # --- Schedules -----------------------------------------------------------
+
+    ScheduledFlight:
+      type: object
+      required: [flight_no, arrival_time, operated_by]
+      properties:
+        flight_no:
+          type: string
+          example: SU-100
+        origin_iata:
+          type: string
+          example: JFK
+          description: Present in inbound schedule entries.
+        destination_iata:
+          type: string
+          example: LHR
+          description: Present in outbound schedule entries.
+        origin_name:
+          type: string
+          example: New York John F. Kennedy
+        destination_name:
+          type: string
+          example: London Heathrow
+        arrival_time:
+          type: string
+          format: time
+          example: "08:35"
+          description: Local time at destination (HH:MM). Present in inbound entries.
+        departure_time:
+          type: string
+          format: time
+          example: "11:20"
+          description: Local time at origin (HH:MM). Present in outbound entries.
+        operated_by:
+          type: string
+          example: Aeroflot
+
+    DaySchedule:
+      type: object
+      required: [day_of_week, flights]
+      properties:
+        day_of_week:
+          type: string
+          enum: [Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday]
+        flights:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledFlight'
+
+    AirportSchedule:
+      type: object
+      required: [airport_iata, schedule]
+      properties:
+        airport_iata:
+          type: string
+          example: SVO
+        schedule:
+          type: array
+          items:
+            $ref: '#/components/schemas/DaySchedule'
+
+    # --- Routes --------------------------------------------------------------
+
+    Price:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: number
+          format: double
+          example: 320.00
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+          example: EUR
+
+    ClassAvailability:
+      type: object
+      required: [seats_left, price]
+      properties:
+        seats_left:
+          type: integer
+          minimum: 0
+          example: 12
+        price:
+          $ref: '#/components/schemas/Price'
+
+    Segment:
+      type: object
+      required: [segment_id, flight_no, origin_iata, destination_iata, departure_datetime, arrival_datetime, available_classes]
+      properties:
+        segment_id:
+          type: string
+          example: seg_111
+        flight_no:
+          type: string
+          example: SU-100
+        origin_iata:
+          type: string
+          example: SVO
+        destination_iata:
+          type: string
+          example: AMS
+        departure_datetime:
+          type: string
+          format: date-time
+          example: "2025-06-15T11:20:00+03:00"
+        arrival_datetime:
+          type: string
+          format: date-time
+          example: "2025-06-15T13:50:00+02:00"
+        duration_minutes:
+          type: integer
+          example: 210
+        available_classes:
+          type: object
+          description: |
+            Map of booking class → availability. Only classes with at least one
+            seat available are included.
+          additionalProperties:
+            $ref: '#/components/schemas/ClassAvailability'
+          example:
+            Economy:
+              seats_left: 12
+              price: { amount: 320.00, currency: EUR }
+            Business:
+              seats_left: 2
+              price: { amount: 950.00, currency: EUR }
+
+    RoutePoint:
+      type: object
+      required: [iata, city_id, city_name]
+      properties:
+        iata:
+          type: string
+          example: SVO
+        city_id:
+          type: string
+          example: SVO-CITY
+        city_name:
+          type: string
+          example: Moscow
+
+    Route:
+      type: object
+      required: [route_id, origin, destination, total_duration_minutes, connections, segments]
+      properties:
+        route_id:
+          type: string
+          example: rt_abc123
+          description: |
+            Opaque identifier for this specific route option.
+            Pass it when creating a booking.
+        origin:
+          $ref: '#/components/schemas/RoutePoint'
+        destination:
+          $ref: '#/components/schemas/RoutePoint'
+        total_duration_minutes:
+          type: integer
+          example: 580
+        connections:
+          type: integer
+          minimum: 0
+          example: 1
+          description: Number of intermediate stops (0 = direct).
+        segments:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Segment'
+
+    RouteSearchResponse:
+      type: object
+      required: [routes, currency]
+      properties:
+        routes:
+          type: array
+          items:
+            $ref: '#/components/schemas/Route'
+        currency:
+          type: string
+          example: EUR
+
+    # --- Bookings ------------------------------------------------------------
+
+    Passenger:
+      type: object
+      required: [first_name, last_name, date_of_birth, passport_number, passport_expiry, nationality, email]
+      properties:
+        first_name:
+          type: string
+          example: Ivan
+        last_name:
+          type: string
+          example: Petrov
+        date_of_birth:
+          type: string
+          format: date
+          example: "1990-05-20"
+        passport_number:
+          type: string
+          example: "700123456"
+        passport_expiry:
+          type: string
+          format: date
+          example: "2030-01-01"
+        nationality:
+          type: string
+          minLength: 2
+          maxLength: 2
+          example: RU
+        email:
+          type: string
+          format: email
+          example: ivan@example.com
+        phone:
+          type: string
+          example: "+79161234567"
+
+    Payment:
+      type: object
+      required: [method]
+      properties:
+        method:
+          type: string
+          enum: [card, sbp, wallet]
+          example: card
+        card_token:
+          type: string
+          description: Tokenised card reference from payment provider. Required when method=card.
+          example: tok_abc
+
+    BookingRequest:
+      type: object
+      required: [route_id, segments, booking_class, passenger, payment]
+      properties:
+        idempotency_key:
+          type: string
+          description: |
+            Client-generated idempotency key. Recommended format: segment IDs
+            sorted lexicographically and joined by commas, e.g. `seg_111,seg_222`.
+            Can also be supplied as the `Idempotency-Key` HTTP header (header takes
+            precedence). Within 24 h, a duplicate key returns the original response
+            without creating a new booking.
+          example: "seg_111,seg_222"
+        route_id:
+          type: string
+          example: rt_abc123
+        segments:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          example: ["seg_111", "seg_222"]
+          description: |
+            Ordered list of segment IDs that make up the chosen route.
+            All segments must belong to the route_id provided.
+        booking_class:
+          type: string
+          enum: [Economy, Comfort, Business]
+          example: Economy
+        passenger:
+          $ref: '#/components/schemas/Passenger'
+        payment:
+          $ref: '#/components/schemas/Payment'
+
+    BookedSegment:
+      type: object
+      required: [segment_id, flight_no, origin_iata, destination_iata, departure_datetime, booking_class, ticket_no]
+      properties:
+        segment_id:
+          type: string
+          example: seg_111
+        flight_no:
+          type: string
+          example: SU-100
+        origin_iata:
+          type: string
+          example: SVO
+        destination_iata:
+          type: string
+          example: AMS
+        departure_datetime:
+          type: string
+          format: date-time
+          example: "2025-06-15T11:20:00+03:00"
+        arrival_datetime:
+          type: string
+          format: date-time
+          example: "2025-06-15T13:50:00+02:00"
+        seat:
+          type: string
+          example: "14C"
+          nullable: true
+          description: Assigned seat number. Null until check-in.
+        booking_class:
+          type: string
+          enum: [Economy, Comfort, Business]
+        ticket_no:
+          type: string
+          example: "555-1234567890"
+        checkin_status:
+          type: string
+          enum: [not_checked_in, checked_in]
+          default: not_checked_in
+
+    Booking:
+      type: object
+      required: [booking_id, pnr, status, passenger, segments, total_price, created_at]
+      properties:
+        booking_id:
+          type: string
+          example: bk_xyz789
+        pnr:
+          type: string
+          example: XYZABC
+        status:
+          type: string
+          enum: [confirmed, cancelled, pending_payment]
+        idempotency_key:
+          type: string
+          example: "seg_111,seg_222"
+        passenger:
+          $ref: '#/components/schemas/Passenger'
+        segments:
+          type: array
+          items:
+            $ref: '#/components/schemas/BookedSegment'
+        total_price:
+          $ref: '#/components/schemas/Price'
+        created_at:
+          type: string
+          format: date-time
+          example: "2025-05-01T09:00:00Z"
+
+    # --- Check-in ------------------------------------------------------------
+
+    CheckInRequest:
+      type: object
+      required: [segment_id]
+      properties:
+        segment_id:
+          type: string
+          example: seg_111
+        seat_preference:
+          type: string
+          enum: [window, aisle, any]
+          default: any
+          description: Seating preference hint — not guaranteed.
+        meal_preference:
+          type: string
+          description: IATA SSPD meal code, e.g. VGML (vegetarian), HNML (Hindu).
+          example: VGML
+
+    BoardingPass:
+      type: object
+      required: [passenger_name, flight_no, origin_iata, destination_iata, departure_datetime, seat, boarding_time, barcode]
+      properties:
+        passenger_name:
+          type: string
+          example: "PETROV/IVAN"
+        flight_no:
+          type: string
+          example: SU-100
+        origin_iata:
+          type: string
+          example: SVO
+        destination_iata:
+          type: string
+          example: AMS
+        departure_datetime:
+          type: string
+          format: date-time
+          example: "2025-06-15T11:20:00+03:00"
+        gate:
+          type: string
+          example: D23
+          nullable: true
+        seat:
+          type: string
+          example: "14A"
+        boarding_time:
+          type: string
+          format: date-time
+          example: "2025-06-15T10:50:00+03:00"
+        barcode:
+          type: string
+          description: BCBP (IATA Bar Coded Boarding Pass) string.
+          example: "M1PETROV/IVAN        XYZABC SVO AMS SU 100Y 15JUN 14A"
+        meal:
+          type: string
+          nullable: true
+          example: VGML
+
+    CheckInResponse:
+      type: object
+      required: [booking_id, segment_id, status, boarding_pass]
+      properties:
+        booking_id:
+          type: string
+          example: bk_xyz789
+        segment_id:
+          type: string
+          example: seg_111
+        status:
+          type: string
+          enum: [checked_in]
+        boarding_pass:
+          $ref: '#/components/schemas/BoardingPass'
+
+    # --- Errors --------------------------------------------------------------
+
+    Error:
+      type: object
+      required: [error_code, message]
+      properties:
+        error_code:
+          type: string
+          example: invalid_param
+          description: Machine-readable error code.
+        message:
+          type: string
+          example: "departure_date must be in YYYY-MM-DD format"
+          description: Human-readable description (English).
+        details:
+          type: object
+          additionalProperties: true
+          description: Optional structured details (field-level validation errors, affected segment IDs, etc.)
+
+    ConflictError:
+      allOf:
+        - $ref: '#/components/schemas/Error'
+        - type: object
+          required: [conflict_type]
+          properties:
+            conflict_type:
+              type: string
+              enum:
+                - duplicate_passenger
+                - segment_full
+                - already_checked_in
+                - check_in_not_open
+                - check_in_closed
+                - booking_cancelled
+              description: |
+                - `duplicate_passenger` — same passport already booked on a segment of this route on the same date. `existing_booking_id` is included in `details`.
+                - `segment_full` — no seats left in the requested class on one or more segments. `affected_segment_id` is included in `details`.
+                - `already_checked_in` — idempotent: boarding pass already issued. Full `boarding_pass` object is included in `details`.
+                - `check_in_not_open` — check-in window has not started yet (more than 24 h before departure).
+                - `check_in_closed` — check-in window has closed (less than 1 h before departure).
+                - `booking_cancelled` — booking is in cancelled state.
+            details:
+              type: object
+              additionalProperties: true
+              example:
+                existing_booking_id: bk_xyz789
+                affected_segment_id: seg_111
+
+  # --- Reusable responses ---------------------------------------------------
+
+  responses:
+    400:
+      description: Bad request — invalid or missing parameters.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: invalid_param
+            message: "departure_date must be in YYYY-MM-DD format"
+
+    401:
+      description: Unauthorised — missing or invalid Bearer token.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: unauthorized
+            message: "Valid Bearer token required"
+
+    402:
+      description: Payment failed — no booking created, no charge made.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: payment_failed
+            message: "Card was declined"
+
+    403:
+      description: Forbidden — authenticated user does not own this resource.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    404:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    409:
+      description: Conflict.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ConflictError'
+
+    422:
+      description: Unprocessable entity (e.g. departure date in the past).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error_code: date_in_past
+            message: "departure_date cannot be in the past"
+
+    500:
+      description: Internal server error.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+paths:
+
+  # --- Geography ------------------------------------------------------------
+
+  /cities:
+    get:
+      tags: [Geography]
+      summary: List all cities
+      description: |
+        Returns all cities served as origin or destination in the schedule.
+      operationId: listCities
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Array of city objects.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/City'
+        '400':
+          $ref: '#/components/responses/400'
+        '500':
+          $ref: '#/components/responses/500'
+
+  /airports:
+    get:
+      tags: [Geography]
+      summary: List all airports
+      description: |
+        Returns all airports that appear in at least one route.
+        Optionally filter by `city_id` — equivalent to `GET /cities/{city_id}/airports`.
+      operationId: listAirports
+      parameters:
+        - $ref: '#/components/parameters/AcceptLanguage'
+        - name: city_id
+          in: query
+          required: false
+          schema:
+            type: string
+            example: SVO-CITY
+          description: Filter by city. Returns only airports belonging to that city.
+      responses:
+        '200':
+          description: Array of airport objects.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Airport'
+        '400':
+          $ref: '#/components/responses/400'
+        '404':
+          $ref: '#/components/responses/404'
+        '500':
+          $ref: '#/components/responses/500'
+
+  /cities/{city_id}/airports:
+    get:
+      tags: [Geography]
+      summary: Airports within a city
+      description: Returns all airports that belong to the given city.
+      operationId: listAirportsByCity
+      parameters:
+        - $ref: '#/components/parameters/CityId'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Array of airport objects.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Airport'
+              example:
+                - iata: SVO
+                  name: Sheremetyevo International Airport
+                  city_id: SVO-CITY
+                  city_name: Moscow
+                  country_code: RU
+                  lat: 55.9726
+                  lon: 37.4146
+                  timezone: Europe/Moscow
+                - iata: DME
+                  name: Domodedovo International Airport
+                  city_id: SVO-CITY
+                  city_name: Moscow
+                  country_code: RU
+                  lat: 55.4088
+                  lon: 37.9063
+                  timezone: Europe/Moscow
+        '400':
+          $ref: '#/components/responses/400'
+        '404':
+          $ref: '#/components/responses/404'
+        '500':
+          $ref: '#/components/responses/500'
+
+  # --- Schedules ------------------------------------------------------------
+
+  /airports/{iata}/schedule/inbound:
+    get:
+      tags: [Schedules]
+      summary: Inbound schedule for an airport
+      description: |
+        Returns the repeating weekly schedule of all flights **arriving** at the
+        given airport, grouped by day of week.
+      operationId: getInboundSchedule
+      parameters:
+        - $ref: '#/components/parameters/Iata'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Weekly inbound schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AirportSchedule'
+              example:
+                airport_iata: SVO
+                schedule:
+                  - day_of_week: Monday
+                    flights:
+                      - flight_no: SU-100
+                        origin_iata: JFK
+                        origin_name: New York John F. Kennedy
+                        arrival_time: "08:35"
+                        operated_by: Aeroflot
+        '400':
+          $ref: '#/components/responses/400'
+        '404':
+          $ref: '#/components/responses/404'
+        '500':
+          $ref: '#/components/responses/500'
+
+  /airports/{iata}/schedule/outbound:
+    get:
+      tags: [Schedules]
+      summary: Outbound schedule for an airport
+      description: |
+        Returns the repeating weekly schedule of all flights **departing** from the
+        given airport, grouped by day of week.
+      operationId: getOutboundSchedule
+      parameters:
+        - $ref: '#/components/parameters/Iata'
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: Weekly outbound schedule.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AirportSchedule'
+              example:
+                airport_iata: SVO
+                schedule:
+                  - day_of_week: Tuesday
+                    flights:
+                      - flight_no: SU-200
+                        destination_iata: LHR
+                        destination_name: London Heathrow
+                        departure_time: "11:20"
+                        operated_by: Aeroflot
+        '400':
+          $ref: '#/components/responses/400'
+        '404':
+          $ref: '#/components/responses/404'
+        '500':
+          $ref: '#/components/responses/500'
+
+  # --- Routes ---------------------------------------------------------------
+
+  /routes:
+    get:
+      tags: [Routes]
+      summary: Search routes between two points
+      description: |
+        Returns available route options connecting `origin` and `destination`.
+
+        **Points** can each be either an IATA airport code or a `city_id`.
+        When a city is provided, all airport combinations within that city are
+        searched automatically.
+
+        **Departure date** filters flights whose first segment departs between
+        `00:00:00` and `23:59:59` local time at the origin on the given date.
+
+        **Seat availability** is checked atomically across all segments.
+        A route is only returned if every segment has at least one seat available
+        in the requested booking class. Partial availability is never exposed.
+
+        **Connections** logic:
+        - `max_connections=0` → direct flights only (no intermediate stops)
+        - `max_connections=N` → at most N intermediate stops
+        - `max_connections=unbounded` (default) → no restriction
+
+        Valid layover window: minimum 45 minutes, maximum 24 hours.
+      operationId: searchRoutes
+      parameters:
+        - name: origin
+          in: query
+          required: true
+          schema:
+            type: string
+            example: SVO
+          description: |
+            IATA airport code (e.g. `SVO`) **or** city_id (e.g. `SVO-CITY`).
+        - name: destination
+          in: query
+          required: true
+          schema:
+            type: string
+            example: JFK
+          description: |
+            IATA airport code (e.g. `JFK`) **or** city_id (e.g. `JFK-CITY`).
+        - name: departure_date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+            example: "2025-06-15"
+          description: |
+            Departure date in `YYYY-MM-DD` format. Interpreted in local time of
+            the origin point. Must not be in the past.
+        - name: booking_class
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [Economy, Comfort, Business]
+          description: |
+            If specified, only routes where ALL segments have at least one seat
+            available in this class are returned.
+        - name: max_connections
+          in: query
+          required: false
+          schema:
+            oneOf:
+              - type: integer
+                minimum: 0
+                maximum: 3
+              - type: string
+                enum: [unbounded]
+            default: unbounded
+          description: |
+            Maximum number of intermediate stops.
+            Accepts integers `0`–`3` or the string `unbounded` (default).
+        - $ref: '#/components/parameters/AcceptLanguage'
+      responses:
+        '200':
+          description: |
+            Route search results. May be an empty array when no routes are found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteSearchResponse'
+        '400':
+          description: |
+            Invalid or missing parameters. Possible `error_code` values:
+            `missing_param`, `invalid_date_format`, `invalid_booking_class`,
+            `invalid_max_connections`, `invalid_accept_language`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Origin or destination point not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '422':
+          $ref: '#/components/responses/422'
+        '500':
+          $ref: '#/components/responses/500'
+
+  # --- Bookings -------------------------------------------------------------
+
+  /bookings:
+    post:
+      tags: [Bookings]
+      summary: Create a booking
+      description: |
+        Books a single passenger on all segments of a selected route.
+
+        ## Idempotency
+
+        Include an `Idempotency-Key` header (or `idempotency_key` field in the
+        body — header takes precedence). **Recommended format:** sorted segment
+        IDs joined by commas, e.g. `seg_111,seg_222`.
+
+        If the server receives the same key within **24 hours**, it returns the
+        original booking response (HTTP 201) without creating a new booking.
+        This makes the endpoint safe to retry after network failures or app crashes.
+
+        ## Duplicate passenger protection
+
+        Before creating a booking the server checks whether the same
+        `passport_number` already holds a **confirmed** booking on any segment
+        of the requested route on the same departure date.
+        If a duplicate is found → `409 Conflict` with
+        `conflict_type: duplicate_passenger` and `existing_booking_id` in
+        `details`.
+
+        ## All-or-nothing seat reservation
+
+        Seats on every segment are reserved atomically **before** payment is
+        charged. If any segment becomes fully booked between route search and
+        booking submission → `409 Conflict` with `conflict_type: segment_full`
+        and `affected_segment_id` in `details`. No charge is made.
+      operationId: createBooking
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+          description: |
+            Client-generated idempotency key. Overrides `idempotency_key` in body.
+            Recommended: sorted segment IDs joined by commas.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+            example:
+              idempotency_key: "seg_111,seg_222"
+              route_id: rt_abc123
+              segments: [seg_111, seg_222]
+              booking_class: Economy
+              passenger:
+                first_name: Ivan
+                last_name: Petrov
+                date_of_birth: "1990-05-20"
+                passport_number: "700123456"
+                passport_expiry: "2030-01-01"
+                nationality: RU
+                email: ivan@example.com
+                phone: "+79161234567"
+              payment:
+                method: card
+                card_token: tok_abc
+      responses:
+        '201':
+          description: Booking confirmed. Same response is returned on idempotent retries.
+          headers:
+            Location:
+              schema:
+                type: string
+              description: URL of the created booking, e.g. `/v1/bookings/bk_xyz789`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '402':
+          $ref: '#/components/responses/402'
+        '409':
+          description: |
+            Conflict. See `conflict_type` for the specific reason:
+            - `duplicate_passenger` — passenger already booked on a segment.
+            - `segment_full` — no seats left on one or more segments.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+        '422':
+          $ref: '#/components/responses/422'
+        '500':
+          $ref: '#/components/responses/500'
+
+  /bookings/{booking_id}:
+    get:
+      tags: [Bookings]
+      summary: Get booking details
+      description: Retrieve full details of a booking. Only the authenticated owner can access it.
+      operationId: getBooking
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      responses:
+        '200':
+          description: Full booking object.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Booking'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '500':
+          $ref: '#/components/responses/500'
+
+  # --- Check-in -------------------------------------------------------------
+
+  /bookings/{booking_id}/checkin:
+    post:
+      tags: [Check-in]
+      summary: Online check-in
+      description: |
+        Performs online check-in for a specific flight segment within a booking.
+
+        **Check-in window:** 24 hours before scheduled departure up to 1 hour
+        before departure (configurable per airline). Attempting check-in outside
+        this window returns `409` with the appropriate `conflict_type`.
+
+        **Idempotency:** Sending the same `segment_id` again returns the existing
+        boarding pass (`409` with `conflict_type: already_checked_in` and the
+        full boarding pass in `details`). The client should treat this as a
+        success and display the existing boarding pass.
+      operationId: checkIn
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/BookingId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInRequest'
+            example:
+              segment_id: seg_111
+              seat_preference: window
+              meal_preference: VGML
+      responses:
+        '200':
+          description: Check-in confirmed. Boarding pass included.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CheckInResponse'
+        '400':
+          description: |
+            Invalid body or `segment_id` not part of this booking.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Booking or segment not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: |
+            Conflict. Possible `conflict_type` values:
+            - `already_checked_in` — idempotent; boarding pass is in `details`.
+            - `check_in_not_open` — check-in window has not started (> 24 h before departure).
+            - `check_in_closed` — check-in window has closed (< 1 h before departure).
+            - `booking_cancelled` — booking has been cancelled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConflictError'
+        '422':
+          description: Flight has already departed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error_code: flight_departed
+                message: "This flight has already departed"
+        '500':
+          $ref: '#/components/responses/500'
