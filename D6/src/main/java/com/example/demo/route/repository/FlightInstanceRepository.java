@@ -1,0 +1,39 @@
+package com.example.demo.route.repository;
+
+import com.example.demo.route.entity.FlightInstance;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import java.time.LocalDate;
+import java.util.List;
+
+public interface FlightInstanceRepository extends JpaRepository<FlightInstance, Integer> {
+
+    @Query(value = """
+        SELECT 
+            f.flight_id, 
+            f.route_no, 
+            r.departure_airport, 
+            r.arrival_airport, 
+            f.scheduled_departure,
+            5000.00 as price,
+            (
+                (SELECT COUNT(*) FROM bookings.seats s 
+                 WHERE s.airplane_code = r.airplane_code 
+                   AND s.fare_conditions = COALESCE(:bookingClass, 'Economy')) - 
+                (SELECT COUNT(*) FROM bookings.boarding_passes bp 
+                 WHERE bp.flight_id = f.flight_id)
+            )::int as available_seats
+        FROM bookings.flights f
+        JOIN bookings.routes r ON f.route_no = r.route_no
+        WHERE r.departure_airport = :origin 
+          AND r.arrival_airport = :destination 
+          AND f.scheduled_departure::date = :departureDate
+        """, nativeQuery = true)
+    List<Object[]> searchFlightsNative(
+            @Param("origin") String origin,
+            @Param("destination") String destination,
+            @Param("departureDate") LocalDate departureDate,
+            @Param("bookingClass") String bookingClass
+    );
+}

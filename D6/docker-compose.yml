@@ -1,0 +1,17 @@
+services:
+  postgres-db:
+    image: postgres:17-alpine
+    container_name: aviation-postgres
+    environment:
+      POSTGRES_DB: demo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: aviation_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./demo.sql:/demo.sql
+    restart: always
+
+volumes:
+  postgres_data:
