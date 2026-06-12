@@ -9,12 +9,13 @@ import com.example.demo.checkin.dto.CheckInRequestDTO;
 import com.example.demo.checkin.entity.BoardingPass;
 import com.example.demo.checkin.repository.BoardingPassRepository;
 import com.example.demo.checkin.service.CheckInService;
+import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -27,23 +28,31 @@ public class CheckInServiceImpl implements CheckInService {
     @Override
     @Transactional
     public BoardingPassDTO checkIn(CheckInRequestDTO request) {
+        if (request.bookingCode() == null || request.bookingCode().isBlank()) {
+            throw new BusinessException("Код бронирования не может быть пустым");
+        }
+        if (request.documentNumber() == null || request.documentNumber().isBlank()) {
+            throw new BusinessException("Номер документа не может быть пустым");
+        }
+        if (request.seatNumber() == null || request.seatNumber().isBlank()) {
+            throw new BusinessException("Номер места не может быть пустым");
+        }
 
         Booking booking = bookingRepository.findById(request.bookingCode())
-                .orElseThrow(() -> new RuntimeException("Бронирование с кодом " + request.bookingCode() + " не найдено"));
+                .orElseThrow(() -> new ResourceNotFoundException("Бронирование с кодом " + request.bookingCode() + " не найдено"));
 
         Passenger passenger = passengerRepository.findByBookingCode(request.bookingCode()).stream()
                 .filter(p -> p.getDocumentNumber().equalsIgnoreCase(request.documentNumber()))
                 .findFirst()
-                .orElseThrow(() -> new RuntimeException("Пассажир с документом " + request.documentNumber() + " не найден в данной брони"));
+                .orElseThrow(() -> new ResourceNotFoundException("Пассажир с документом " + request.documentNumber() + " не найден в данной брони"));
 
         Integer flightId = boardingPassRepository.findFlightIdByTicketNo(passenger.getTicketNo());
         if (flightId == null) {
-            throw new RuntimeException("Для данного билета не найден активный рейс");
+            throw new ResourceNotFoundException("Для данного билета не найден активный рейс");
         }
 
-        // Проверяем, не зарегистрирован ли уже
         if (boardingPassRepository.findByTicketNoAndFlightId(passenger.getTicketNo(), flightId).isPresent()) {
-            throw new RuntimeException("Пассажир уже прошел регистрацию на этот рейс");
+            throw new BusinessException("Пассажир уже прошел регистрацию на этот рейс");
         }
 
         Integer nextBoardingNo = boardingPassRepository.getNextBoardingNo(flightId);

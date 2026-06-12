@@ -1,12 +1,14 @@
 package com.example.demo.route.service.impl;
 
+import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.route.dto.RouteResponseDTO;
 import com.example.demo.route.repository.FlightInstanceRepository;
 import com.example.demo.route.service.RouteService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -20,17 +22,44 @@ public class RouteServiceImpl implements RouteService {
     public List<RouteResponseDTO> searchRoutes(String origin, String destination, LocalDate departureDate,
                                                String bookingClass, Integer maxConnections, String lang) {
 
-        List<Object[]> rows = flightInstanceRepository
-                .searchFlightsNative(origin, destination, departureDate, bookingClass);
+        if (origin.equalsIgnoreCase(destination)) {
+            throw new BusinessException("Аэропорт отправления и назначения не могут совпадать");
+        }
 
-        return rows.stream().map(row -> new RouteResponseDTO(
-                row[0].toString(),                                 // id (flight_id)
-                (String) row[1],                                   // flightNo
-                (String) row[2],                                   // origin
-                (String) row[3],                                   // destination
-                ((java.time.Instant) row[4]).atZone(java.time.ZoneId.systemDefault()).toLocalDate(),
-                ((Number) row[6]).intValue(),                      // availableSeats
-                ((Number) row[5]).doubleValue()                    // price
-        )).collect(Collectors.toList());
+        String actualClass = (bookingClass == null) ? "Economy" : bookingClass;
+
+        List<Object[]> rows = flightInstanceRepository
+                .searchFlightsNative(origin, destination, departureDate.toString(), actualClass);
+
+        if (rows.isEmpty()) {
+            throw new ResourceNotFoundException("Рейсы по направлению " + origin + " -> " + destination + " на дату " + departureDate + " не найдены");
+        }
+
+        return rows.stream().map(row -> {
+            LocalDate depDate;
+            Object dateObj = row[4];
+
+            if (dateObj instanceof java.time.Instant) {
+                depDate = ((java.time.Instant) dateObj).atZone(ZoneId.systemDefault()).toLocalDate();
+            } else if (dateObj instanceof java.sql.Timestamp) {
+                depDate = ((java.sql.Timestamp) dateObj).toLocalDateTime().toLocalDate();
+            } else if (dateObj instanceof java.time.OffsetDateTime) {
+                depDate = ((java.time.OffsetDateTime) dateObj).toLocalDate();
+            } else if (dateObj instanceof java.time.ZonedDateTime) {
+                depDate = ((java.time.ZonedDateTime) dateObj).toLocalDate();
+            } else {
+                depDate = LocalDate.parse(dateObj.toString().substring(0, 10));
+            }
+
+            return new RouteResponseDTO(
+                    row[0].toString(),
+                    row[1] != null ? row[1].toString() : "UNKNOWN",
+                    row[2] != null ? row[2].toString() : origin,
+                    row[3] != null ? row[3].toString() : destination,
+                    depDate,
+                    row[6] != null ? ((Number) row[6]).intValue() : 0,
+                    row[5] != null ? ((Number) row[5]).doubleValue() : 5000.0
+            );
+        }).collect(Collectors.toList());
     }
 }

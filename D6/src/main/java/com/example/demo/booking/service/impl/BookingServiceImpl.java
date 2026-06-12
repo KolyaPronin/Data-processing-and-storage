@@ -6,6 +6,8 @@ import com.example.demo.booking.dto.PassengerDTO;
 import com.example.demo.booking.repository.BookingRepository;
 import com.example.demo.booking.repository.PassengerRepository;
 import com.example.demo.booking.service.BookingService;
+import com.example.demo.exception.BusinessException;
+import com.example.demo.exception.ResourceNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -26,16 +28,25 @@ public class BookingServiceImpl implements BookingService {
     @Override
     @Transactional
     public BookingResponseDTO createBooking(BookingRequestDTO request) {
+        if (request.passengers() == null || request.passengers().isEmpty()) {
+            throw new BusinessException("Список пассажиров для бронирования не может быть пустым");
+        }
+
         String bookingCode = generateBookingCode();
         OffsetDateTime now = OffsetDateTime.now();
         double pricePerTicket = 5000.0;
         double totalAmount = request.passengers().size() * pricePerTicket;
 
-        // 1. Вставляем только те 3 поля, которые реально существуют в таблице bookings.bookings
         bookingRepository.insertBooking(bookingCode, now, BigDecimal.valueOf(totalAmount));
 
-        // 2. Для каждого пассажира вставляем билет
         request.passengers().forEach(dto -> {
+            if (dto.firstName() == null || dto.firstName().isBlank() || dto.lastName() == null || dto.lastName().isBlank()) {
+                throw new BusinessException("Имя и фамилия пассажира должны быть заполнены");
+            }
+            if (dto.documentNumber() == null || dto.documentNumber().isBlank()) {
+                throw new BusinessException("Номер документа пассажира должен быть заполнен");
+            }
+
             String ticketNo = generateTicketNumber();
             String fullName = (dto.firstName() + " " + dto.lastName()).toUpperCase();
 
@@ -43,7 +54,6 @@ public class BookingServiceImpl implements BookingService {
             bookingRepository.linkTicketToFlight(ticketNo, request.flightNo(), "Economy", pricePerTicket);
         });
 
-        // 3. Возвращаем ответ
         return new BookingResponseDTO(
                 bookingCode,
                 request.flightNo(),
@@ -57,7 +67,7 @@ public class BookingServiceImpl implements BookingService {
     @Override
     public BookingResponseDTO getBookingByCode(String bookingCode) {
         var booking = bookingRepository.findById(bookingCode)
-                .orElseThrow(() -> new RuntimeException("Бронь с кодом " + bookingCode + " не найдена"));
+                .orElseThrow(() -> new ResourceNotFoundException("Бронь с кодом " + bookingCode + " не найдена"));
 
         String flightNo = bookingRepository.findFlightNoByBookRef(bookingCode);
 

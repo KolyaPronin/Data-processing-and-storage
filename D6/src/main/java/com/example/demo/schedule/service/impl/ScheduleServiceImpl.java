@@ -1,5 +1,6 @@
 package com.example.demo.schedule.service.impl;
 
+import com.example.demo.exception.ResourceNotFoundException;
 import com.example.demo.schedule.dto.ScheduleDTO;
 import com.example.demo.schedule.entity.ScheduledFlight;
 import com.example.demo.schedule.repository.ScheduledFlightRepository;
@@ -18,14 +19,28 @@ public class ScheduleServiceImpl implements ScheduleService {
 
     @Override
     public List<ScheduleDTO> getArrivingSchedule(String iata) {
-        return scheduledFlightRepository.findByDestinationIata(iata).stream()
+        if (iata == null || iata.isBlank()) {
+            throw new ResourceNotFoundException("IATA-код аэропорта не может быть пустым");
+        }
+        List<ScheduledFlight> flights = scheduledFlightRepository.findByDestinationIata(iata);
+        if (flights.isEmpty()) {
+            throw new ResourceNotFoundException("Расписание прилетающих рейсов для аэропорта '" + iata + "' не найдено");
+        }
+        return flights.stream()
                 .map(this::mapToScheduleDto)
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<ScheduleDTO> getDepartingSchedule(String iata) {
-        return scheduledFlightRepository.findByOriginIata(iata).stream()
+        if (iata == null || iata.isBlank()) {
+            throw new ResourceNotFoundException("IATA-код аэропорта не может быть пустым");
+        }
+        List<ScheduledFlight> flights = scheduledFlightRepository.findByOriginIata(iata);
+        if (flights.isEmpty()) {
+            throw new ResourceNotFoundException("Расписание вылетающих рейсов для аэропорта '" + iata + "' не найдено");
+        }
+        return flights.stream()
                 .map(this::mapToScheduleDto)
                 .collect(Collectors.toList());
     }
